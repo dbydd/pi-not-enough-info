@@ -1,12 +1,13 @@
 import { editorHostsBorderStatusAt } from "../../domain/config-normalization.js";
 import type { NormalizedPiOmpThemeConfig } from "../../domain/config-types.js";
-import { createBuiltinSegments, type SegmentContext, type StatusSnapshot } from "../../domain/status.js";
+import { createBuiltinSegments, type SegmentContext, type StatusSegmentId, type StatusSnapshot } from "../../domain/status.js";
 import { renderStatus, resolveStatusSeparator } from "../../domain/status-renderer.js";
 import { type ResolvedTheme, resolveTheme } from "../../domain/theme.js";
 import { fitAnsiWidth } from "../../shared/ansi.js";
 
 export const PRIMARY_WIDGET_KEY = "pi-omp-theme.status.primary";
 export const SECONDARY_WIDGET_KEY = "pi-omp-theme.status.secondary";
+export const USAGE_WIDGET_KEY = "pi-omp-theme.status.usage";
 
 type WidgetPlacement = "aboveEditor" | "belowEditor";
 type RenderComponent = { render(width: number): string[]; invalidate(requestRender?: boolean): void; dispose?(): void };
@@ -59,9 +60,37 @@ export interface StatusLineInstallOptions {
 	isCurrent?: () => boolean;
 }
 
+/** Usage segments rendered as their own widget row above the context gauge. */
+const USAGE_SEGMENT_IDS: readonly StatusSegmentId[] = [
+	"token_in",
+	"token_out",
+	"cache_read",
+	"cache_hit",
+	"cache_history",
+	"output_rate",
+	"cost",
+];
+
 interface Ownership {
 	token: symbol;
 	generation: number;
+}
+
+/**
+ * segments: they already live on their own line above the context gauge, and
+ * repeating them in the primary row is what wedged them into one strip at
+ * narrow widths.
+ */
+function withoutUsageSegments(ids: readonly StatusSegmentId[]): StatusSegmentId[] {
+	const usage = new Set<StatusSegmentId>(USAGE_SEGMENT_IDS);
+	return ids.filter((id) => !usage.has(id));
+}
+function normalizeUsageRow(layout: NormalizedPiOmpThemeConfig["statusLine"]["layout"]) {
+	return {
+		left: withoutUsageSegments(layout.left),
+		right: withoutUsageSegments(layout.right),
+		secondary: layout.secondary,
+	};
 }
 
 const ownership = new WeakMap<object, Map<string, Ownership>>();
@@ -123,6 +152,7 @@ export function installStatusLine(options: StatusLineInstallOptions): StatusLine
 	let disposed = false;
 	let primaryComponent: RenderComponent | undefined;
 	let secondaryComponent: RenderComponent | undefined;
+	let usageComponent: RenderComponent | undefined;
 	let footerData: FooterDataProviderView | undefined;
 	let footerOwner = false;
 	let footerUnsubscribe: (() => void) | undefined;
@@ -181,7 +211,7 @@ export function installStatusLine(options: StatusLineInstallOptions): StatusLine
 		const key = `${width}|${themeVersion}|${JSON.stringify(effective)}`;
 		const cached = lineCache.get(secondary);
 		if (cached && cached.key === key) return cached.lines;
-		const result = renderStatus(config.statusLine.layout, effective, width, {
+		const result = renderStatus(normalizeUsageRow(config.statusLine.layout), effective, width, {
 			separator,
 			segments,
 			theme: resolved,
@@ -203,6 +233,23 @@ export function installStatusLine(options: StatusLineInstallOptions): StatusLine
 				: truncated;
 		lineCache.set(secondary, { key, lines: rendered });
 		return rendered;
+	};
+	const renderUsageRow = (activeTheme: ActivePiTheme, width: number): string[] => {
+		if (width <= 0 || !config.enabled || !config.statusLine.enabled) return [];
+		const { resolved, separator } = themeFor(activeTheme);
+		const effective = effectiveSnapshot(snapshot);
+		const lines = renderStatus(
+			{ left: [...USAGE_SEGMENT_IDS], right: [], secondary: [] },
+			effective,
+			width,
+			{
+				separator,
+				segments,
+				theme: resolved,
+				options: Object.fromEntries(config.statusLine.disabledSegments.map((id) => [id, { disabled: true }])),
+			},
+		).lines;
+		return lines.map((line) => fitAnsiWidth(line, width));
 	};
 	/** Merge authoritative native footer data (branch + extension statuses) into the snapshot. */
 	const effectiveSnapshot = (input: StatusSnapshot): StatusSnapshot => {
@@ -228,6 +275,7 @@ export function installStatusLine(options: StatusLineInstallOptions): StatusLine
 		footerUnsubscribe = data.onBranchChange(() => {
 			primaryComponent?.invalidate(false);
 			secondaryComponent?.invalidate(false);
+			usageComponent?.invalidate(false);
 			tui.requestRender?.();
 		});
 		return {
@@ -267,38 +315,41 @@ export function installStatusLine(options: StatusLineInstallOptions): StatusLine
 		}
 	};
 	const factory =
-		(secondary: boolean): WidgetFactory =>
+		(kind: "primary" | "secondary" | "usage"): WidgetFactory =>
 		(tui, theme) => {
 			const currentTheme = theme;
 			const component: RenderComponent = {
 				render(width) {
-					const lines = render(currentTheme, width, secondary);
-					return lines;
+					return kind === "usage" ? renderUsageRow(currentTheme, width) : render(currentTheme, width, kind === "secondary");
 				},
 				invalidate(requestRender = true) {
 					// Pi supplies a fresh theme to the factory on theme replacement. Do not retain
 					// pre-rendered ANSI strings; the next render reads the current component theme.
-					primaryComponent = secondary ? primaryComponent : component;
-					secondaryComponent = secondary ? component : secondaryComponent;
+					if (kind === "usage") usageComponent = component;
+					else if (kind === "secondary") secondaryComponent = component;
+					else primaryComponent = component;
 					if (requestRender) tui.requestRender?.();
 				},
 				dispose() {},
 			};
-			if (secondary) secondaryComponent = component;
-			else primaryComponent = component;
-			return component;
+			if (kind === "usage") usageComponent = component;
+				else if (kind === "secondary") secondaryComponent = component;
+				else primaryComponent = component;
+				return component;
 		};
 	const claim = (key: string) => owners.set(key, { token, generation: options.generation });
 	const mount = () => {
 		if (disposed || options.isCurrent?.() === false) return;
 		if (!config.enabled || !config.statusLine.enabled) {
+			clear(USAGE_WIDGET_KEY);
 			clear(PRIMARY_WIDGET_KEY);
 			clear(SECONDARY_WIDGET_KEY);
 			clearFooter();
 			return;
 		}
-		if (safeWidget(options.host, PRIMARY_WIDGET_KEY, factory(false), placementFor(config))) claim(PRIMARY_WIDGET_KEY);
-		if (safeWidget(options.host, SECONDARY_WIDGET_KEY, factory(true), "belowEditor")) claim(SECONDARY_WIDGET_KEY);
+		if (safeWidget(options.host, USAGE_WIDGET_KEY, factory("usage"), placementFor(config))) claim(USAGE_WIDGET_KEY);
+		if (safeWidget(options.host, PRIMARY_WIDGET_KEY, factory("primary"), placementFor(config))) claim(PRIMARY_WIDGET_KEY);
+		if (safeWidget(options.host, SECONDARY_WIDGET_KEY, factory("secondary"), "belowEditor")) claim(SECONDARY_WIDGET_KEY);
 		mountFooter();
 	};
 	function clear(key: string): void {
@@ -315,6 +366,7 @@ export function installStatusLine(options: StatusLineInstallOptions): StatusLine
 			snapshot = next;
 			primaryComponent?.invalidate(false);
 			secondaryComponent?.invalidate(false);
+			usageComponent?.invalidate(false);
 		},
 		configure(next) {
 			if (disposed || options.isCurrent?.() === false) return;
@@ -322,20 +374,24 @@ export function installStatusLine(options: StatusLineInstallOptions): StatusLine
 			const enabledChanged = next.enabled !== config.enabled || next.statusLine.enabled !== config.statusLine.enabled;
 			config = next;
 			if (placementChanged || enabledChanged) {
+				clear(USAGE_WIDGET_KEY);
 				clear(PRIMARY_WIDGET_KEY);
 				clear(SECONDARY_WIDGET_KEY);
 				clearFooter();
 				primaryComponent = undefined;
 				secondaryComponent = undefined;
+				usageComponent = undefined;
 				mount();
 			} else {
 				primaryComponent?.invalidate(false);
 				secondaryComponent?.invalidate(false);
+				usageComponent?.invalidate(false);
 			}
 		},
 		dispose() {
 			if (disposed) return;
 			disposed = true;
+			clear(USAGE_WIDGET_KEY);
 			clear(PRIMARY_WIDGET_KEY);
 			clear(SECONDARY_WIDGET_KEY);
 			clearFooter();
