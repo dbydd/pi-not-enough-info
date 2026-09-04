@@ -25,13 +25,28 @@ interface UsageTotals {
  */
 export function usageFromSession(session: SessionUsageSource): UsageSnapshot | undefined {
 	const totals: UsageTotals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
+	let latestCacheHitRate: number | undefined;
+	let latestOutputRate: number | undefined;
+	let latestUserTimestamp: number | undefined;
 	let sawUsage = false;
 	for (const entry of session.getEntries()) {
 		if (entry.type === "message") {
+			if (entry.message.role === "user") {
+				latestUserTimestamp = entry.message.timestamp;
+				continue;
+			}
 			if (entry.message.role !== "assistant" && entry.message.role !== "toolResult") continue;
 			const usage = "usage" in entry.message ? entry.message.usage : undefined;
 			if (!usage) continue;
 			addUsage(totals, usage);
+			if (entry.message.role === "assistant") {
+				const promptTokens = usage.input + usage.cacheRead + usage.cacheWrite;
+				latestCacheHitRate = promptTokens > 0 ? (usage.cacheRead / promptTokens) * 100 : undefined;
+				if (latestUserTimestamp !== undefined && usage.output > 0) {
+					const elapsedSeconds = (entry.message.timestamp - latestUserTimestamp) / 1000;
+					if (elapsedSeconds > 0) latestOutputRate = usage.output / elapsedSeconds;
+				}
+			}
 			sawUsage = true;
 		} else if ((entry.type === "branch_summary" || entry.type === "compaction") && entry.usage) {
 			addUsage(totals, entry.usage);
@@ -39,11 +54,15 @@ export function usageFromSession(session: SessionUsageSource): UsageSnapshot | u
 		}
 	}
 	if (!sawUsage) return undefined;
+	const promptTokens = totals.input + totals.cacheRead + totals.cacheWrite;
 	return {
 		inputTokens: totals.input,
 		outputTokens: totals.output,
 		cacheReadTokens: totals.cacheRead,
 		cacheWriteTokens: totals.cacheWrite,
+		...(latestCacheHitRate !== undefined ? { cacheHitRate: latestCacheHitRate } : {}),
+		...(promptTokens > 0 ? { cacheHistoryRate: (totals.cacheRead / promptTokens) * 100 } : {}),
+		...(latestOutputRate !== undefined ? { outputRate: latestOutputRate } : {}),
 		cost: totals.cost,
 		subscriptionMode: "unknown",
 		streaming: false,

@@ -1,5 +1,4 @@
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { type KeyId, matchesKey } from "@earendil-works/pi-tui";
+import type { ExtensionAPI, ExtensionContext, ExtensionUIContext } from "@earendil-works/pi-coding-agent";
 import type { ConfigFilePort } from "../app/config-storage.js";
 import { createPiOmpThemeApp, type PiOmpThemeApp } from "../app/index.js";
 import { resolveTheme } from "../domain/theme.js";
@@ -40,11 +39,88 @@ export type CompatibilityTestHooks = {
 	paths?: (cwd: string) => { globalPath: string; projectPath: string };
 	/** Test-only capability seam; Pi's ExtensionContext does not provide a Git runner. */
 	gitRunner?: import("../domain/providers.js").GitCommandRunner;
-	/** Override the thinking-cycle key binding consumed to suppress Pi's status toast. */
-	thinkingCycleKey?: string;
 };
 
-const THINKING_CYCLE = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
+type RenderSink = { current: (() => void) | undefined };
+
+type UnknownFactory = (...args: readonly unknown[]) => unknown;
+
+function captureTuiRender(sink: RenderSink, value: unknown): void {
+	if (!value || typeof value !== "object") return;
+	const requestRender = (value as { requestRender?: (force?: boolean) => void }).requestRender;
+	if (typeof requestRender !== "function") return;
+	sink.current = () => requestRender.call(value);
+}
+
+/** Capture the public TUI supplied to component factories for scheduler paints. */
+function renderAwareUi(ui: ExtensionUIContext, sink: RenderSink): ExtensionUIContext {
+	captureTuiRender(sink, ui);
+	const editorFactoryMap = new WeakMap<object, unknown>();
+	const wrappedUi = Object.create(ui) as ExtensionUIContext;
+	wrappedUi.setWidget = ((key: string, content: unknown, options?: unknown) => {
+		if (typeof content !== "function") {
+			ui.setWidget(key, content as never, options as never);
+			return;
+		}
+		const factory = content as UnknownFactory;
+		ui.setWidget(
+			key,
+			((tui: unknown, theme: unknown) => {
+				captureTuiRender(sink, tui);
+				return factory(tui, theme) as never;
+			}) as never,
+			options as never,
+		);
+	}) as ExtensionUIContext["setWidget"];
+	wrappedUi.setFooter = ((factory: unknown) => {
+		if (typeof factory !== "function") {
+			ui.setFooter(undefined);
+			return;
+		}
+		const wrapped = (tui: unknown, theme: unknown, footerData: unknown) => {
+			captureTuiRender(sink, tui);
+			return (factory as UnknownFactory)(tui, theme, footerData) as never;
+		};
+		ui.setFooter(wrapped as never);
+	}) as ExtensionUIContext["setFooter"];
+	wrappedUi.setHeader = ((factory: unknown) => {
+		if (typeof factory !== "function") {
+			ui.setHeader(undefined);
+			return;
+		}
+		const wrapped = (tui: unknown, theme: unknown) => {
+			captureTuiRender(sink, tui);
+			return (factory as UnknownFactory)(tui, theme) as never;
+		};
+		ui.setHeader(wrapped as never);
+	}) as ExtensionUIContext["setHeader"];
+	wrappedUi.custom = ((factory: unknown, options?: unknown) => {
+		if (typeof factory !== "function") return ui.custom(factory as never, options as never);
+		const wrapped = (tui: unknown, theme: unknown, keybindings: unknown, done: unknown) => {
+			captureTuiRender(sink, tui);
+			return (factory as UnknownFactory)(tui, theme, keybindings, done) as never;
+		};
+		return ui.custom(wrapped as never, options as never);
+	}) as ExtensionUIContext["custom"];
+	wrappedUi.setEditorComponent = ((factory: unknown) => {
+		if (typeof factory !== "function") {
+			ui.setEditorComponent(undefined);
+			return;
+		}
+		const wrapped = (tui: unknown, theme: unknown, keybindings: unknown) => {
+			captureTuiRender(sink, tui);
+			return (factory as UnknownFactory)(tui, theme, keybindings) as never;
+		};
+		editorFactoryMap.set(wrapped, factory);
+		ui.setEditorComponent(wrapped as never);
+	}) as ExtensionUIContext["setEditorComponent"];
+	wrappedUi.getEditorComponent = (() => {
+		const current = ui.getEditorComponent?.();
+		if (typeof current !== "function") return current;
+		return (editorFactoryMap.get(current) ?? current) as never;
+	}) as ExtensionUIContext["getEditorComponent"];
+	return wrappedUi;
+}
 
 export function createPiOmpThemeSessionCoordinator(pi: ExtensionAPI, hooks: CompatibilityTestHooks = {}) {
 	const filePort = hooks.filePort ?? createPiConfigFilePort();
@@ -63,7 +139,6 @@ export function createPiOmpThemeSessionCoordinator(pi: ExtensionAPI, hooks: Comp
 	let cwd = process.cwd();
 	let active = false;
 	let tuiSession = false;
-	let terminalInputUnsubscribe: (() => void) | undefined;
 	let sessionTheme: unknown;
 	let sessionUi: import("@earendil-works/pi-coding-agent").ExtensionUIContext | undefined;
 	const source = createConfigSourceAdapter(
@@ -262,6 +337,9 @@ export function createPiOmpThemeSessionCoordinator(pi: ExtensionAPI, hooks: Comp
 			// read from the directory Pi writes sessions into. Best-effort by design:
 			// it returns an empty list rather than delaying or failing startup.
 			const sessions = readRecentSessions(ctx.sessionManager?.getSessionFile?.(), WELCOME_SESSION_SLOTS);
+			const renderSink: RenderSink = { current: undefined };
+			const runtimeUi = ctx.ui ? renderAwareUi(ctx.ui, renderSink) : undefined;
+			const requestRender = () => renderSink.current?.();
 			let sessionTitle: string | undefined;
 			try {
 				sessionTitle = ctx.sessionManager?.getSessionName?.() || undefined;
@@ -272,7 +350,7 @@ export function createPiOmpThemeSessionCoordinator(pi: ExtensionAPI, hooks: Comp
 				{
 					mode: ctx.mode,
 					hasUI: ctx.hasUI,
-					...(ctx.ui ? { ui: ctx.ui } : {}),
+					...(runtimeUi ? { ui: runtimeUi } : {}),
 					...(ctx.cwd ? { cwd: ctx.cwd } : {}),
 					...(ctx.model
 						? {
@@ -285,6 +363,7 @@ export function createPiOmpThemeSessionCoordinator(pi: ExtensionAPI, hooks: Comp
 							}
 						: {}),
 					...(ctx.thinkingLevel ? { thinkingLevel: ctx.thinkingLevel } : {}),
+					requestRender,
 					// Seeded here as well as from session_info_changed: that event fires
 					// only when the name changes, so a resumed session would show an
 					// untitled bar until something renamed it.
@@ -301,28 +380,13 @@ export function createPiOmpThemeSessionCoordinator(pi: ExtensionAPI, hooks: Comp
 					...(ctx.scopedModels && ctx.scopedModels.length > 0 ? { models: ctx.scopedModels.length } : {}),
 				},
 			);
-			terminalInputUnsubscribe?.();
-			terminalInputUnsubscribe = undefined;
-			// Consume Pi's default thinking-cycle key and re-issue it through the public API so
-			// the footer shows the level without Pi's transient "Thinking level: X" status toast.
-			const cycleKey = hooks.thinkingCycleKey ?? "shift+tab";
-			if (ctx.mode === "tui" && ctx.ui?.onTerminalInput) {
-				terminalInputUnsubscribe = ctx.ui.onTerminalInput((data) => {
-					if (!matchesKey(data, cycleKey as KeyId)) return undefined;
-					const current = pi.getThinkingLevel?.();
-					const index = Math.max(0, THINKING_CYCLE.indexOf(current as (typeof THINKING_CYCLE)[number]));
-					const next = THINKING_CYCLE[(index + 1) % THINKING_CYCLE.length];
-					pi.setThinkingLevel?.(next as never);
-					return { consume: true };
-				});
-			}
+			// Pi's editor owns the configured thinking-cycle key. Leaving that action
+			// on the native path keeps one keypress mapped to one level transition.
 			syncOperational(app.config);
 		},
 		shutdown(): void {
 			active = false;
 			tuiSession = false;
-			terminalInputUnsubscribe?.();
-			terminalInputUnsubscribe = undefined;
 			resetBatchRegistry();
 			resetGrepRegistry();
 			resetBashTreeRegistry();

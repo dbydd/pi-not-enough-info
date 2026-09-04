@@ -64,9 +64,10 @@ export interface RuntimeHost {
 export function createPiOmpThemeRuntime(
 	host: RuntimeHost,
 	generation: number,
-	requestRender: () => void = () => {},
+	requestRender?: () => void,
 ): PiOmpThemeRuntime {
 	let disposed = false;
+	const renderRequest = requestRender ?? host.requestRender ?? (() => {});
 	const extensionStatuses = (): readonly import("../domain/status.js").ExtensionStatus[] | undefined => {
 		if (!host.extensionStatusProvider) return undefined;
 		try {
@@ -78,7 +79,7 @@ export function createPiOmpThemeRuntime(
 	};
 	let currentConfig = host.config;
 	const disposables = new DisposableStore();
-	const scheduler = new RenderScheduler({ requestRender }, generation, () => !disposed);
+	const scheduler = new RenderScheduler({ requestRender: renderRequest }, generation, () => !disposed);
 	const git = new CachedGitProvider(host.gitRunner);
 	const contextProvider = new InMemoryContextProvider();
 	const usageProvider = new InMemoryUsageProvider();
@@ -199,9 +200,8 @@ export function createPiOmpThemeRuntime(
 				config: currentConfig,
 				snapshot: startupSnapshot(currentConfig),
 				generation,
-				requestRender,
-				timeoutMs: 3000,
 				isCurrent: () => !disposed,
+				timeoutMs: 3000,
 			});
 			if (startup) {
 				disposables.add(startup);
@@ -250,7 +250,7 @@ export function createPiOmpThemeRuntime(
 			statusLine?.update(currentSnapshot);
 			editor?.update(currentSnapshot);
 			startup?.update(startupSnapshot(currentConfig));
-			requestRender();
+			scheduler.schedule("coalesced");
 		});
 	}
 	if (usage) {
@@ -275,7 +275,7 @@ export function createPiOmpThemeRuntime(
 			if (disposed) return;
 			currentResources = resources;
 			startup?.update(startupSnapshot(currentConfig));
-			requestRender();
+			scheduler.schedule("coalesced");
 		},
 		dismissStartup() {
 			startup?.dismiss();
@@ -335,6 +335,7 @@ export function createPiOmpThemeRuntime(
 			statusLine?.configure(nextConfig);
 			editor?.configure(nextConfig);
 			startup?.configure(nextConfig);
+			scheduler.schedule("immediate");
 		},
 		invalidateGit() {
 			if (disposed || !host.cwd || !currentConfig.enabled || !currentConfig.statusLine.enabled) return;
@@ -345,7 +346,7 @@ export function createPiOmpThemeRuntime(
 				statusLine?.update(currentSnapshot);
 				editor?.update(currentSnapshot);
 				startup?.update(startupSnapshot(currentConfig));
-				requestRender();
+				scheduler.schedule("coalesced");
 			});
 		},
 		get disposed() {
@@ -374,7 +375,7 @@ export class PiOmpThemeRuntimeController {
 
 	start(ctx: RuntimeHost): PiOmpThemeRuntime {
 		this.stop();
-		this.activeRuntime = createPiOmpThemeRuntime(ctx, ++this.nextGeneration);
+		this.activeRuntime = createPiOmpThemeRuntime(ctx, ++this.nextGeneration, ctx.requestRender);
 		return this.activeRuntime;
 	}
 

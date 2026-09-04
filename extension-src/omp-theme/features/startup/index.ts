@@ -444,14 +444,14 @@ class StartupComponent implements Component {
 		this.requestRender = requestRender;
 	}
 
-	setSnapshot(snapshot: StartupSnapshot): void {
+	setSnapshot(snapshot: StartupSnapshot, requestRender = true): void {
 		this.snapshot = snapshot;
-		this.invalidate();
+		this.invalidate(requestRender);
 	}
 
-	setConfig(config: NormalizedPiOmpThemeConfig): void {
+	setConfig(config: NormalizedPiOmpThemeConfig, requestRender = true): void {
 		this.config = config;
-		this.invalidate();
+		this.invalidate(requestRender);
 	}
 
 	render(width: number): string[] {
@@ -470,8 +470,8 @@ class StartupComponent implements Component {
 		return lines;
 	}
 
-	invalidate(): void {
-		this.requestRender();
+	invalidate(requestRender = true): void {
+		if (requestRender) this.requestRender();
 	}
 }
 
@@ -603,14 +603,14 @@ export function installStartup(options: StartupInstallOptions): StartupInstallat
 			// header that has scrolled out of view never forces a full redraw.
 			if (nextKey === headerKey) return;
 			headerKey = nextKey;
-			for (const item of components) item.setSnapshot(next);
+			for (const item of components) item.setSnapshot(next, false);
 			options.requestRender?.();
 		},
 		dismiss,
 		configure(next) {
 			if (disposed || options.isCurrent?.() === false) return;
 			config = next;
-			for (const item of components) item.setConfig(next);
+			for (const item of components) item.setConfig(next, false);
 			if (next.startup.mode === "off") {
 				dismiss();
 				clearHeader();

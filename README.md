@@ -1,11 +1,24 @@
-# @nguyenquangthai/pi-omp-theme
+# pi-not-enough-info
 
-[![npm](https://img.shields.io/npm/v/@nguyenquangthai/pi-omp-theme)](https://www.npmjs.com/package/@nguyenquangthai/pi-omp-theme)
-[![license](https://img.shields.io/npm/l/@nguyenquangthai/pi-omp-theme)](LICENSE)
+> A Pi TUI status/info theme extension, forked from [QuangThai/pi-omp-theme](https://github.com/QuangThai/pi-omp-theme).
+
+[![npm](https://img.shields.io/npm/v/pi-not-enough-info)](https://www.npmjs.com/package/pi-not-enough-info)
+[![license](https://img.shields.io/npm/l/pi-not-enough-info)](LICENSE)
+
+## Upstream and this fork
+
+- **Upstream:** [QuangThai/pi-omp-theme](https://github.com/QuangThai/pi-omp-theme) — OMP-inspired visual theme and TUI presentation extension (Titanium themes, status line, editor, messages, boxed tools). All base rendering stays upstream work.
+- **This fork (`pi-not-enough-info`):** keeps the upstream presentation, and adds an info-density status line — Pi-native latest-turn cache hit rate (`CH`), cumulative history hit rate (`HCH`), and per-turn output speed (`OUT`), all laid out in one continuous left group so no wide gap appears between usage segments.
+
+Install it in Pi with one command:
+
+```bash
+pi install npm:pi-not-enough-info
+```
 
 An OMP-inspired visual theme and TUI presentation extension for [Pi](https://pi.dev). It combines Titanium dark/light themes with a coordinated startup view, status line, editor, messages, and tool rendering.
 
-![pi-omp-theme surface gallery](https://raw.githubusercontent.com/QuangThai/pi-omp-theme/main/media/gallery-preview.png?v=gallery-2)
+![pi-not-enough-info surface gallery](https://raw.githubusercontent.com/dbydd/pi-not-enough-info/main/media/gallery-preview.png?v=gallery-2)
 
 ## Surface gallery
 
@@ -13,32 +26,32 @@ The gallery is more than a logo preview: it shows the surfaces people see in a r
 
 | Surface | What it demonstrates | Full-size preview |
 |---|---|---|
-| **Welcome** | Startup resources, tool providers, and recent sessions | [open `welcome.png`](https://raw.githubusercontent.com/QuangThai/pi-omp-theme/main/media/welcome.png) |
-| **Read** | Quiet, single-line file reads with a readable path | [open `read.png`](https://raw.githubusercontent.com/QuangThai/pi-omp-theme/main/media/read.png) |
-| **List** | Bounded directory output rendered as a tree | [open `list.png`](https://raw.githubusercontent.com/QuangThai/pi-omp-theme/main/media/list.png) |
-| **Grep** | Match counts, file grouping, context, and truncation | [open `grep.png`](https://raw.githubusercontent.com/QuangThai/pi-omp-theme/main/media/grep.png) |
-| **Tool call** | Boxed command, response, exit status, and elapsed time | [open `tool-call.png`](https://raw.githubusercontent.com/QuangThai/pi-omp-theme/main/media/tool-call.png) |
-| **Status line** | Model, effort, path, Git state, and context usage | [open `status-line.png`](https://raw.githubusercontent.com/QuangThai/pi-omp-theme/main/media/status-line.png) |
+| **Welcome** | Startup resources, tool providers, and recent sessions | [open `welcome.png`](https://raw.githubusercontent.com/dbydd/pi-not-enough-info/main/media/welcome.png) |
+| **Read** | Quiet, single-line file reads with a readable path | [open `read.png`](https://raw.githubusercontent.com/dbydd/pi-not-enough-info/main/media/read.png) |
+| **List** | Bounded directory output rendered as a tree | [open `list.png`](https://raw.githubusercontent.com/dbydd/pi-not-enough-info/main/media/list.png) |
+| **Grep** | Match counts, file grouping, context, and truncation | [open `grep.png`](https://raw.githubusercontent.com/dbydd/pi-not-enough-info/main/media/grep.png) |
+| **Tool call** | Boxed command, response, exit status, and elapsed time | [open `tool-call.png`](https://raw.githubusercontent.com/dbydd/pi-not-enough-info/main/media/tool-call.png) |
+| **Status line** | Model, effort, path, Git state, and context usage | [open `status-line.png`](https://raw.githubusercontent.com/dbydd/pi-not-enough-info/main/media/status-line.png) |
 
 <table>
   <tr>
-    <td width="50%"><strong>Welcome</strong><br><a href="https://raw.githubusercontent.com/QuangThai/pi-omp-theme/main/media/welcome.png"><img src="https://raw.githubusercontent.com/QuangThai/pi-omp-theme/main/media/welcome.png" alt="Welcome screen with resources, providers, and recent sessions" width="100%"></a></td>
-    <td width="50%"><strong>Read</strong><br><a href="https://raw.githubusercontent.com/QuangThai/pi-omp-theme/main/media/read.png"><img src="https://raw.githubusercontent.com/QuangThai/pi-omp-theme/main/media/read.png" alt="Compact read tool surface" width="100%"></a></td>
+    <td width="50%"><strong>Welcome</strong><br><a href="https://raw.githubusercontent.com/dbydd/pi-not-enough-info/main/media/welcome.png"><img src="https://raw.githubusercontent.com/dbydd/pi-not-enough-info/main/media/welcome.png" alt="Welcome screen with resources, providers, and recent sessions" width="100%"></a></td>
+    <td width="50%"><strong>Read</strong><br><a href="https://raw.githubusercontent.com/dbydd/pi-not-enough-info/main/media/read.png"><img src="https://raw.githubusercontent.com/dbydd/pi-not-enough-info/main/media/read.png" alt="Compact read tool surface" width="100%"></a></td>
   </tr>
   <tr>
-    <td><strong>List</strong><br><a href="https://raw.githubusercontent.com/QuangThai/pi-omp-theme/main/media/list.png"><img src="https://raw.githubusercontent.com/QuangThai/pi-omp-theme/main/media/list.png" alt="List tool rendered as a bounded tree" width="100%"></a></td>
-    <td><strong>Grep</strong><br><a href="https://raw.githubusercontent.com/QuangThai/pi-omp-theme/main/media/grep.png"><img src="https://raw.githubusercontent.com/QuangThai/pi-omp-theme/main/media/grep.png" alt="Grep results grouped by file with match context" width="100%"></a></td>
+    <td><strong>List</strong><br><a href="https://raw.githubusercontent.com/dbydd/pi-not-enough-info/main/media/list.png"><img src="https://raw.githubusercontent.com/dbydd/pi-not-enough-info/main/media/list.png" alt="List tool rendered as a bounded tree" width="100%"></a></td>
+    <td><strong>Grep</strong><br><a href="https://raw.githubusercontent.com/dbydd/pi-not-enough-info/main/media/grep.png"><img src="https://raw.githubusercontent.com/dbydd/pi-not-enough-info/main/media/grep.png" alt="Grep results grouped by file with match context" width="100%"></a></td>
   </tr>
   <tr>
-    <td><strong>Tool call</strong><br><a href="https://raw.githubusercontent.com/QuangThai/pi-omp-theme/main/media/tool-call.png"><img src="https://raw.githubusercontent.com/QuangThai/pi-omp-theme/main/media/tool-call.png" alt="Boxed tool call with output, exit status, and elapsed time" width="100%"></a></td>
-    <td><strong>Status line</strong><br><a href="https://raw.githubusercontent.com/QuangThai/pi-omp-theme/main/media/status-line.png"><img src="https://raw.githubusercontent.com/QuangThai/pi-omp-theme/main/media/status-line.png" alt="Responsive status line with model, Git, and context usage" width="100%"></a></td>
+    <td><strong>Tool call</strong><br><a href="https://raw.githubusercontent.com/dbydd/pi-not-enough-info/main/media/tool-call.png"><img src="https://raw.githubusercontent.com/dbydd/pi-not-enough-info/main/media/tool-call.png" alt="Boxed tool call with output, exit status, and elapsed time" width="100%"></a></td>
+    <td><strong>Status line</strong><br><a href="https://raw.githubusercontent.com/dbydd/pi-not-enough-info/main/media/status-line.png"><img src="https://raw.githubusercontent.com/dbydd/pi-not-enough-info/main/media/status-line.png" alt="Responsive status line with model, Git, and context usage" width="100%"></a></td>
   </tr>
 </table>
 
 Install it in Pi with one command:
 
 ```bash
-pi install npm:@nguyenquangthai/pi-omp-theme
+pi install npm:pi-not-enough-info
 ```
 
 ## Features
@@ -60,7 +73,7 @@ pi install npm:@nguyenquangthai/pi-omp-theme
 Use Pi's package manager so the extension and themes are registered correctly:
 
 ```bash
-pi install npm:@nguyenquangthai/pi-omp-theme
+pi install npm:pi-not-enough-info
 ```
 
 Running `npm install` alone downloads the package but does not register it with Pi.
@@ -72,33 +85,33 @@ pi list
 pi -p "/pi-omp-theme doctor"
 ```
 
-`pi list` should include `npm:@nguyenquangthai/pi-omp-theme`. The doctor command reports the active preset, Pi compatibility identity, theme, surface fallbacks, and the host binding (`operational.compatibility.hostBinding.status` must read `bound`).
+`pi list` should include `npm:pi-not-enough-info`. The doctor command reports the active preset, Pi compatibility identity, theme, surface fallbacks, and the host binding (`operational.compatibility.hostBinding.status` must read `bound`).
 
 ### Install from a local checkout
 
 ```bash
 npm ci && npm run build
-pi install /path/to/pi-omp-theme
+pi install /path/to/pi-not-enough-info
 ```
 
-The compiled entry is `dist/extensions/pi-omp-theme.ts` on purpose. Pi loads extensions through jiti, which applies the host aliases (`@earendil-works/*` → the running Pi's own modules) while loading the `.ts` entry. A `.js` entry next to a checkout's `node_modules/@earendil-works/pi-coding-agent` can bind the extension to a second copy of Pi and make message/tool decoration silently miss the TUI. Pi 0.84.3+ runs its Node CLI/RPC entrypoints from a bundled runtime and exposes those host modules virtually; the package detects that loader path instead of comparing it with the modular package entry. If the doctor ever reports `hostBinding.status: "foreign"`, the extension was loaded outside Pi's loader; reinstall with `pi install npm:@nguyenquangthai/pi-omp-theme` or rebuild the checkout.
+The compiled entry is `dist/extensions/pi-omp-theme.ts` on purpose. Pi loads extensions through jiti, which applies the host aliases (`@earendil-works/*` → the running Pi's own modules) while loading the `.ts` entry. A `.js` entry next to a checkout's `node_modules/@earendil-works/pi-coding-agent` can bind the extension to a second copy of Pi and make message/tool decoration silently miss the TUI. Pi 0.84.3+ runs its Node CLI/RPC entrypoints from a bundled runtime and exposes those host modules virtually; the package detects that loader path instead of comparing it with the modular package entry. If the doctor ever reports `hostBinding.status: "foreign"`, the extension was loaded outside Pi's loader; reinstall with `pi install npm:pi-not-enough-info` or rebuild the checkout.
 
 The first launch after a rebuild transpiles the bundle once (a few seconds); jiti caches the result for later launches.
 
 ### Update
 
 ```bash
-pi update npm:@nguyenquangthai/pi-omp-theme
+pi update npm:pi-not-enough-info
 # Or update every installed Pi package:
 pi update --extensions
 ```
 
-Version-pinned installs such as `npm:@nguyenquangthai/pi-omp-theme@1.0.3` remain pinned until explicitly changed.
+Version-pinned installs such as `npm:pi-not-enough-info@1.0.3` remain pinned until explicitly changed.
 
 ### Uninstall
 
 ```bash
-pi remove npm:@nguyenquangthai/pi-omp-theme
+pi remove npm:pi-not-enough-info
 ```
 
 ## Defaults
@@ -195,7 +208,7 @@ npm run check
 
 `npm run check` is also enforced by the npm `prepack` hook.
 
-Releases are published manually to avoid CI billing. The complete maintainer checklist is documented in the [release guide](https://github.com/QuangThai/pi-omp-theme/blob/main/docs/releasing.md).
+Releases are published manually to avoid CI billing. The complete maintainer checklist is documented in the [release guide](https://github.com/dbydd/pi-not-enough-info/blob/main/docs/releasing.md).
 
 ## License
 

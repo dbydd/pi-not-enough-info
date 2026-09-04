@@ -15,6 +15,9 @@ export const STATUS_SEGMENT_IDS = [
 	"token_in",
 	"token_out",
 	"cache_read",
+	"cache_hit",
+	"cache_history",
+	"output_rate",
 	"cache_write",
 	"cost",
 	"time_spent",
@@ -54,6 +57,12 @@ export interface UsageSnapshot {
 	readonly outputTokens: number;
 	readonly cacheReadTokens: number;
 	readonly cacheWriteTokens: number;
+	/** Pi-native latest assistant-turn cache hit rate (%). */
+	readonly cacheHitRate?: number;
+	/** Cumulative cache hit rate (%), across all prompt tokens in the session. */
+	readonly cacheHistoryRate?: number;
+	/** Latest completed assistant output rate (tokens per second). */
+	readonly outputRate?: number;
 	readonly cost?: number;
 	readonly currency?: string;
 	readonly subscriptionMode?: "api" | "subscription" | "unknown";
@@ -327,22 +336,58 @@ export function createBuiltinSegments(): ReadonlyMap<StatusSegmentId, StatusSegm
 		})),
 		segment("token_in", 50, ({ snapshot, theme }) => ({
 			visible: snapshot.usage?.inputTokens !== undefined,
-			content: theme.apply("tokens", `${theme.glyph("input")} ${snapshot.usage?.inputTokens ?? 0}`),
-			compactContent: theme.apply("tokens", `i:${snapshot.usage?.inputTokens ?? 0}`),
+			content: theme.apply("tokens", `${theme.glyph("input")} ${formatTokens(snapshot.usage?.inputTokens ?? 0)}`),
+			compactContent: theme.apply("tokens", `i:${formatTokens(snapshot.usage?.inputTokens ?? 0)}`),
 		})),
 		segment("token_out", 50, ({ snapshot, theme }) => ({
 			visible: snapshot.usage?.outputTokens !== undefined,
-			content: theme.apply("tokens", `${theme.glyph("output")} ${snapshot.usage?.outputTokens ?? 0}`),
-			compactContent: theme.apply("tokens", `o:${snapshot.usage?.outputTokens ?? 0}`),
+			content: theme.apply("tokens", `${theme.glyph("output")} ${formatTokens(snapshot.usage?.outputTokens ?? 0)}`),
+			compactContent: theme.apply("tokens", `o:${formatTokens(snapshot.usage?.outputTokens ?? 0)}`),
 		})),
 		segment("cache_read", 40, ({ snapshot, theme }) => ({
 			visible: Boolean(snapshot.usage?.cacheReadTokens),
-			content: theme.apply("cache", `${theme.glyph("cache")} ${snapshot.usage?.cacheReadTokens ?? 0}`),
-			compactContent: theme.apply("cache", `cr:${snapshot.usage?.cacheReadTokens ?? 0}`),
+			content: theme.apply("cache", `${theme.glyph("cache")} ${formatTokens(snapshot.usage?.cacheReadTokens ?? 0)}`),
+			compactContent: theme.apply("cache", `cr:${formatTokens(snapshot.usage?.cacheReadTokens ?? 0)}`),
 		})),
+		segment("cache_hit", 42, ({ snapshot, theme }) => {
+			const usage = snapshot.usage;
+			if (!usage) return { visible: false, content: "" };
+			const promptTokens = usage.inputTokens + usage.cacheReadTokens + usage.cacheWriteTokens;
+			const rate = usage.cacheHitRate ?? (promptTokens > 0 ? (usage.cacheReadTokens / promptTokens) * 100 : undefined);
+			if (rate === undefined || (usage.cacheReadTokens === 0 && usage.cacheWriteTokens === 0)) {
+				return { visible: false, content: "" };
+			}
+			const label = `CH${rate.toFixed(1)}%`;
+			return {
+				visible: true,
+				content: theme.apply("cache", label),
+				compactContent: theme.apply("cache", `CH${rate.toFixed(0)}%`),
+			};
+		}),
+		segment("cache_history", 41, ({ snapshot, theme }) => {
+			const usage = snapshot.usage;
+			const rate = usage?.cacheHistoryRate;
+			if (!usage || rate === undefined || (usage.cacheReadTokens === 0 && usage.cacheWriteTokens === 0)) {
+				return { visible: false, content: "" };
+			}
+			return {
+				visible: true,
+				content: theme.apply("cache", `HCH${rate.toFixed(1)}%`),
+				compactContent: theme.apply("cache", `HCH${rate.toFixed(0)}%`),
+			};
+		}),
+		segment("output_rate", 39, ({ snapshot, theme }) => {
+			const rate = snapshot.usage?.outputRate;
+			if (rate === undefined || rate <= 0) return { visible: false, content: "" };
+			return {
+				visible: true,
+				content: theme.apply("tokens", `${theme.glyph("output")} OUT${formatRate(rate)}/s`),
+				compactContent: theme.apply("tokens", `OUT${formatRate(rate)}/s`),
+			};
+		}),
 		segment("cache_write", 35, ({ snapshot, theme }) => ({
 			visible: Boolean(snapshot.usage?.cacheWriteTokens),
-			content: theme.apply("cache", `${theme.glyph("cache")} w${snapshot.usage?.cacheWriteTokens ?? 0}`),
+			content: theme.apply("cache", `${theme.glyph("cache")} w${formatTokens(snapshot.usage?.cacheWriteTokens ?? 0)}`),
 		})),
 		segment("cost", 65, ({ snapshot, theme }) => {
 			const cost = snapshot.usage?.cost;
@@ -425,6 +470,12 @@ function contextBarToken(percent: number): SemanticToken {
 	if (percent >= 70) return "contextHigh";
 	if (percent >= 50) return "contextMedium";
 	return "contextLow";
+}
+
+function formatRate(rate: number): string {
+	if (rate >= 100) return Math.round(rate).toString();
+	if (rate >= 10) return rate.toFixed(1);
+	return rate.toFixed(2);
 }
 
 function formatTokens(value: number): string {

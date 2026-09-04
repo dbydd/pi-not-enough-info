@@ -191,6 +191,76 @@ test("session start captures project trust exactly once and reuses the decision"
 	}
 });
 
+
+test("session UI component factories provide the scheduler's TUI repaint callback", async () => {
+	let renders = 0;
+	let terminalInputRegistrations = 0;
+	const fakeTui = { requestRender: () => renders++ };
+	const theme = { fg: (_color: string, text: string) => text };
+	const invokeFactory = (content: unknown) => {
+		if (typeof content === "function") return (content as (tui: unknown, theme: unknown) => unknown)(fakeTui, theme);
+		return content;
+	};
+	const ui = {
+		setWidget(_key: string, content: unknown) {
+			invokeFactory(content);
+		},
+		setFooter(factory: unknown) {
+			if (typeof factory === "function") (factory as (tui: unknown, theme: unknown, data: unknown) => unknown)(fakeTui, theme, {
+				getGitBranch: () => null,
+				getExtensionStatuses: () => new Map(),
+				onBranchChange: () => () => {},
+			});
+		},
+		setHeader() {},
+		setEditorComponent() {},
+		setHiddenThinkingLabel() {},
+		onTerminalInput() {
+			terminalInputRegistrations++;
+			return () => {};
+		},
+		theme,
+	};
+	const pi = { getFlag: () => false } as unknown as ExtensionAPI;
+	const coordinator = createPiOmpThemeSessionCoordinator(pi, {
+		filePort: {
+			async read() {
+				return JSON.stringify({
+					piOmpTheme: { enabled: true, editor: { enabled: false }, startup: { mode: "off" } },
+				});
+			},
+			async writeAtomic() {},
+		},
+		paths: () => ({ globalPath: "<global>", projectPath: "<project>" }),
+		gitRunner: { run: async () => ({ stdout: "", stderr: "", code: 0 }) },
+	});
+	const ctx = {
+		mode: "tui",
+		hasUI: true,
+		ui,
+		cwd: "D:\\Personal\\pi-omp-theme",
+		isProjectTrusted: () => true,
+		sessionManager: {
+			getEntries: () => [],
+			getSessionFile: () => undefined,
+			getSessionName: () => undefined,
+		},
+		getContextUsage: () => undefined,
+	} as unknown as ExtensionContext;
+
+	try {
+		await coordinator.start({ reason: "startup" }, ctx);
+		await new Promise((resolveDelay) => setTimeout(resolveDelay, 30));
+		renders = 0;
+		coordinator.app.update({}, "deferred");
+		await new Promise((resolveDelay) => setTimeout(resolveDelay, 70));
+		assert.equal(renders, 1);
+		assert.equal(terminalInputRegistrations, 0);
+	} finally {
+		coordinator.shutdown();
+	}
+});
+
 function lifecycleHandlers(): Map<string, (...args: unknown[]) => unknown> {
 	const handlers = new Map<string, (...args: unknown[]) => unknown>();
 	const pi = {

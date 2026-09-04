@@ -9,7 +9,7 @@ export const PRIMARY_WIDGET_KEY = "pi-omp-theme.status.primary";
 export const SECONDARY_WIDGET_KEY = "pi-omp-theme.status.secondary";
 
 type WidgetPlacement = "aboveEditor" | "belowEditor";
-type RenderComponent = { render(width: number): string[]; invalidate(): void; dispose?(): void };
+type RenderComponent = { render(width: number): string[]; invalidate(requestRender?: boolean): void; dispose?(): void };
 type WidgetFactory = (tui: { requestRender?: () => void }, theme: ActivePiTheme) => RenderComponent;
 
 /** Read-only view of Pi's footer data provider, kept out of the domain layer. */
@@ -176,9 +176,6 @@ export function installStatusLine(options: StatusLineInstallOptions): StatusLine
 		// Border placement: the frame draws it instead — but only while it is wide
 		// enough to, so a narrow terminal still gets its status row.
 		if (!statusRowVisible(config, width)) return [];
-		// Border placement: the frame draws it instead — but only while it is wide
-		// enough to, so a narrow terminal still gets its status row.
-		if (!statusRowVisible(config, width)) return [];
 		const { resolved, separator } = themeFor(activeTheme);
 		const effective = effectiveSnapshot(snapshot);
 		const key = `${width}|${themeVersion}|${JSON.stringify(effective)}`;
@@ -229,8 +226,8 @@ export function installStatusLine(options: StatusLineInstallOptions): StatusLine
 		footerData = data;
 		footerUnsubscribe?.();
 		footerUnsubscribe = data.onBranchChange(() => {
-			primaryComponent?.invalidate();
-			secondaryComponent?.invalidate();
+			primaryComponent?.invalidate(false);
+			secondaryComponent?.invalidate(false);
 			tui.requestRender?.();
 		});
 		return {
@@ -278,12 +275,12 @@ export function installStatusLine(options: StatusLineInstallOptions): StatusLine
 					const lines = render(currentTheme, width, secondary);
 					return lines;
 				},
-				invalidate() {
+				invalidate(requestRender = true) {
 					// Pi supplies a fresh theme to the factory on theme replacement. Do not retain
 					// pre-rendered ANSI strings; the next render reads the current component theme.
 					primaryComponent = secondary ? primaryComponent : component;
 					secondaryComponent = secondary ? component : secondaryComponent;
-					if (tui.requestRender) tui.requestRender();
+					if (requestRender) tui.requestRender?.();
 				},
 				dispose() {},
 			};
@@ -316,8 +313,8 @@ export function installStatusLine(options: StatusLineInstallOptions): StatusLine
 		update(next) {
 			if (disposed || options.isCurrent?.() === false) return;
 			snapshot = next;
-			primaryComponent?.invalidate();
-			secondaryComponent?.invalidate();
+			primaryComponent?.invalidate(false);
+			secondaryComponent?.invalidate(false);
 		},
 		configure(next) {
 			if (disposed || options.isCurrent?.() === false) return;
@@ -332,8 +329,8 @@ export function installStatusLine(options: StatusLineInstallOptions): StatusLine
 				secondaryComponent = undefined;
 				mount();
 			} else {
-				primaryComponent?.invalidate();
-				secondaryComponent?.invalidate();
+				primaryComponent?.invalidate(false);
+				secondaryComponent?.invalidate(false);
 			}
 		},
 		dispose() {

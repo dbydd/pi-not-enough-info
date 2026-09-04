@@ -15,7 +15,7 @@ export const STATUS_PRESETS: Readonly<Record<PresetName, StatusLayout>> = Object
 	}),
 	full: Object.freeze({
 		left: ["hostname", "model", "thinking", "path", "git", "session"],
-		right: ["token_in", "token_out", "cache_read", "cost", "context_pct", "time_spent", "time"],
+		right: ["token_in", "token_out", "cache_read", "cache_hit", "cache_history", "output_rate", "cost", "context_pct", "time_spent", "time"],
 		secondary: ["extension_statuses"],
 	}),
 	ascii: Object.freeze({

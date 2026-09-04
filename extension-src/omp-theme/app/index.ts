@@ -77,6 +77,7 @@ export interface AppHost {
 	readonly cwd?: string;
 	readonly model?: { id?: string; name?: string; provider?: string; reasoning?: boolean };
 	readonly thinkingLevel?: string;
+	readonly requestRender?: () => void;
 	readonly getContextUsage?: () => { tokens: number | null; contextWindow: number; percent: number | null } | undefined;
 	readonly projectTrusted?: boolean;
 	readonly extensionStatusProvider?: () => readonly import("../domain/status.js").ExtensionStatus[] | undefined;
@@ -224,6 +225,7 @@ export function createPiOmpThemeApp(
 				...(ctx.cwd ? { cwd: ctx.cwd } : {}),
 				...(ctx.model ? { model: ctx.model } : {}),
 				...(ctx.thinkingLevel ? { thinkingLevel: ctx.thinkingLevel } : {}),
+				...(ctx.requestRender ? { requestRender: ctx.requestRender } : {}),
 				config,
 				startupReason: reason,
 				...(resources ? { resources: toStartupResources(resources) } : {}),

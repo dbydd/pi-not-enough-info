@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { createDoctor } from "../extension-src/omp-theme/app/doctor.js";
 import { resolveConfigDetailed } from "../extension-src/omp-theme/domain/config-normalization.js";
 import { renderStatus } from "../extension-src/omp-theme/domain/status-renderer.js";
-import { createBuiltinSegments, type StatusSnapshot } from "../extension-src/omp-theme/domain/status.js";
+import { createBuiltinSegments, STATUS_SEGMENT_IDS, type StatusSnapshot } from "../extension-src/omp-theme/domain/status.js";
 import type { ResolvedTheme } from "../extension-src/omp-theme/domain/theme.js";
 import { visibleWidth } from "../extension-src/omp-theme/shared/ansi.js";
 
@@ -16,6 +16,38 @@ const theme: ResolvedTheme = {
 	noColor: true,
 };
 
+test("cache-hit segment reports full and compact percentages from prompt tokens", () => {
+	const segment = createBuiltinSegments().get("cache_hit");
+	assert.ok(segment);
+	const snapshot: StatusSnapshot = {
+		usage: {
+			inputTokens: 20,
+			outputTokens: 4,
+			cacheReadTokens: 60,
+			cacheWriteTokens: 20,
+			streaming: false,
+		},
+	};
+	const result = segment.render({ snapshot, theme, options: {}, width: 80 });
+
+	assert.equal(result.visible, true);
+	assert.match(result.content, /CH60\.0%/);
+	assert.match(result.compactContent ?? "", /CH60%/);
+});
+
+test("cache-hit segment reports zero-rate cache activity and is registered in the full preset", () => {
+	const segment = createBuiltinSegments().get("cache_hit");
+	assert.ok(segment);
+	const base = { inputTokens: 40, outputTokens: 1, cacheWriteTokens: 10, streaming: false } as const;
+	const absent = segment.render({ snapshot: { usage: { ...base, cacheReadTokens: 0 } }, theme, options: {}, width: 80 });
+	const missing = segment.render({ snapshot: {}, theme, options: {}, width: 80 });
+	assert.equal(absent.visible, true);
+	assert.match(absent.content, /CH0\.0%/);
+	assert.equal(missing.visible, false);
+	assert.ok(STATUS_SEGMENT_IDS.includes("cache_hit"));
+	const { config } = resolveConfigDetailed({ global: { preset: "full" } });
+	assert.ok(config.statusLine.layout.right.includes("cache_hit"));
+});
 test("claude preset resolves its coordinated editor and status composition", () => {
 	const result = resolveConfigDetailed({ global: { preset: "claude" } });
 

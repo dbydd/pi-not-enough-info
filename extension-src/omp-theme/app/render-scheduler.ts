@@ -3,12 +3,17 @@ export interface SchedulerHost {
 	requestRender(): void;
 }
 
+/**
+ * Coalesce runtime updates onto the earliest pending paint. Pi already rate-limits
+ * TUI paints, so one timer per urgency class can queue several paints for one
+ * logical update. Immediate work keeps its microtask latency and supersedes a
+ * delayed paint.
+ */
 export class RenderScheduler {
 	private stopped = false;
 	private immediateQueued = false;
-	private coalescedTimer: ReturnType<typeof setTimeout> | undefined;
-	private deferredTimer: ReturnType<typeof setTimeout> | undefined;
-	private retryTimer: ReturnType<typeof setTimeout> | undefined;
+	private timer: ReturnType<typeof setTimeout> | undefined;
+	private dueAt = 0;
 	constructor(
 		private readonly host: SchedulerHost,
 		private readonly generation: number,
@@ -18,6 +23,11 @@ export class RenderScheduler {
 		if (this.stopped || !this.isCurrent(this.generation)) return;
 		if (kind === "immediate") {
 			if (this.immediateQueued) return;
+			if (this.timer !== undefined) {
+				clearTimeout(this.timer);
+				this.timer = undefined;
+				this.dueAt = 0;
+			}
 			this.immediateQueued = true;
 			queueMicrotask(() => {
 				this.immediateQueued = false;
@@ -25,11 +35,17 @@ export class RenderScheduler {
 			});
 			return;
 		}
-		const target = kind === "coalesced" ? "coalescedTimer" : kind === "deferred" ? "deferredTimer" : "retryTimer";
-		if (this[target] !== undefined) return;
+		// An immediate render is already queued for this turn. It supersedes every
+		// timer and keeps the queue single-shot.
+		if (this.immediateQueued) return;
 		const delay = kind === "coalesced" ? 16 : kind === "deferred" ? 50 : 100;
-		this[target] = setTimeout(() => {
-			this[target] = undefined;
+		const dueAt = Date.now() + delay;
+		if (this.timer !== undefined && this.dueAt <= dueAt) return;
+		if (this.timer !== undefined) clearTimeout(this.timer);
+		this.dueAt = dueAt;
+		this.timer = setTimeout(() => {
+			this.timer = undefined;
+			this.dueAt = 0;
 			this.render();
 		}, delay);
 	}
@@ -38,11 +54,8 @@ export class RenderScheduler {
 	}
 	cancel(): void {
 		this.stopped = true;
-		if (this.coalescedTimer !== undefined) clearTimeout(this.coalescedTimer);
-		if (this.deferredTimer !== undefined) clearTimeout(this.deferredTimer);
-		if (this.retryTimer !== undefined) clearTimeout(this.retryTimer);
-		this.coalescedTimer = undefined;
-		this.deferredTimer = undefined;
-		this.retryTimer = undefined;
+		if (this.timer !== undefined) clearTimeout(this.timer);
+		this.timer = undefined;
+		this.dueAt = 0;
 	}
 }

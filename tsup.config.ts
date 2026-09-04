@@ -24,7 +24,7 @@ export default defineConfig({
 	outExtension: () => ({ js: ".ts" }),
 	banner: {
 		js: [
-			"// @nguyenquangthai/pi-omp-theme — compiled bundle.",
+			"// pi-not-enough-info — compiled bundle.",
 			"// The .ts extension is deliberate: Pi's jiti loader always transpiles .ts and",
 			"// resolves @earendil-works/* to the running Pi's own modules (see tsup.config.ts).",
 		].join("\n"),

@@ -8,7 +8,8 @@
  */
 
 /** Band travel speed, in cells per second. Keep at or below the driver's frame rate. */
-const SPEED_CELLS_PER_S = 30;
+/** Band travel speed, in cells per second. Keep it aligned with the 100 ms driver interval. */
+const SPEED_CELLS_PER_S = 10;
 
 const CLASSIC_PADDING = 10;
 const CLASSIC_BAND_HALF_WIDTH = 6;

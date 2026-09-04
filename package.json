@@ -1,31 +1,27 @@
 {
-  "name": "@nguyenquangthai/pi-omp-theme",
-  "version": "1.0.8",
-  "description": "An OMP-inspired visual theme and TUI presentation extension for Pi.",
+  "name": "pi-not-enough-info",
+  "version": "0.1.0",
+  "description": "A Pi TUI status/info theme extension: Pi-native cache rates (CH), history rates (HCH), and turn output speed (OUT) in a dense status line.",
   "license": "MIT",
   "author": "Nguyen Quang Thai",
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/QuangThai/pi-omp-theme.git"
+    "url": "git+https://github.com/dbydd/pi-not-enough-info.git"
   },
-  "homepage": "https://github.com/QuangThai/pi-omp-theme#readme",
+  "homepage": "https://github.com/dbydd/pi-not-enough-info#readme",
   "bugs": {
-    "url": "https://github.com/QuangThai/pi-omp-theme/issues"
+    "url": "https://github.com/dbydd/pi-not-enough-info/issues"
   },
   "keywords": [
-    "pi-package",
+    "cache",
+    "info-density",
     "pi",
-    "pi-extension",
-    "pi-theme",
     "pi-coding-agent",
-    "omp",
-    "oh-my-pi",
-    "extension",
-    "tui",
-    "terminal-theme",
-    "status-line",
-    "theme"
+    "pi-extension",
+    "pi-package",
+    "pi-theme",
+    "status-line"
   ],
   "pi": {
     "extensions": [
@@ -34,7 +30,7 @@
     "themes": [
       "./themes"
     ],
-    "image": "https://raw.githubusercontent.com/QuangThai/pi-omp-theme/main/media/gallery-preview.png?v=gallery-2"
+    "image": "https://raw.githubusercontent.com/dbydd/pi-not-enough-info/main/media/gallery-preview.png?v=gallery-2"
   },
   "files": [
     "dist/**/*.ts",

@@ -10,15 +10,15 @@
 import { keyText } from "@earendil-works/pi-coding-agent";
 import { createSegmentedShimmer, type ShimmerMode, type ShimmerPalette } from "../../shared/shimmer.js";
 
-/** omp's `status` spinner set, at its 80 ms cadence. */
+/** omp's `status` spinner set, at a 160 ms cadence. */
 const STATUS_FRAMES = ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"] as const;
-const FRAME_INTERVAL_MS = 80;
+const FRAME_INTERVAL_MS = 160;
 
 /** ASCII fallback for terminals configured without Unicode block support. */
 const ASCII_FRAMES = ["|", "/", "-", "\\"] as const;
 
-/** 30 fps: matches the shimmer's travel speed, so the band steps one cell a frame. */
-const SHIMMER_INTERVAL_MS = Math.round(1000 / 30);
+/** Ten FPS keeps the sweep legible while limiting timer-driven redraws. */
+const SHIMMER_INTERVAL_MS = 100;
 
 /** Pi's own wording, kept verbatim so only the color sweep is added. */
 const WORKING_TEXT = "Working...";

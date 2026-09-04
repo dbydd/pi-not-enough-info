@@ -217,7 +217,7 @@ export class StyledEditor extends CustomEditor implements EditorComponent {
 	update(snapshot: StatusSnapshot): void {
 		if (this.disposed) return;
 		this.snapshot = snapshot;
-		this.invalidate();
+		this.invalidate(false);
 	}
 
 	configure(config: NormalizedPiOmpThemeConfig): void {
@@ -225,7 +225,7 @@ export class StyledEditor extends CustomEditor implements EditorComponent {
 		this.config = config;
 		this.semantic = semanticTheme(this.piTheme, config);
 		this.statusTheme = statusLineTheme(this.fullTheme, config);
-		this.invalidate();
+		this.invalidate(false);
 	}
 
 	override handleInput(data: string): void {
@@ -234,11 +234,9 @@ export class StyledEditor extends CustomEditor implements EditorComponent {
 		this.onSnapshot({ ...this.snapshot });
 	}
 
-	override invalidate(): void {
+	override invalidate(requestRender = true): void {
 		super.invalidate();
-		this.semantic = semanticTheme(this.piTheme, this.config);
-		this.statusTheme = statusLineTheme(this.fullTheme, this.config);
-		this.tui.requestRender();
+		if (requestRender) this.tui.requestRender();
 	}
 
 	override render(width: number): string[] {
@@ -617,10 +615,12 @@ export class StyledEditor extends CustomEditor implements EditorComponent {
 			return [border(glyph.repeat(width)), ...body, border(glyph.repeat(width)), ...metadata];
 		}
 		if (kind === "claude") {
-			// omp's Claude Code composer: two full-width rules and nothing else. The
-			// rules carry the thinking level as colour, and the status lives on its own
-			// row below them — deliberately not inside the rules.
-			return [border("─".repeat(width)), ...body, border("─".repeat(width)), ...metadata];
+			// Port of omp's textual gauge (homelab 793fb1): `=` = used context,
+			// `-` = remaining, `│` = compaction threshold tick. Mirrors
+			// StatusLineComponent#buildStandaloneRuleFill so claude keeps its
+			// two-rule chrome while still carrying a code-level progress read.
+			const topFill = this.claudeRuleFill(width) ?? border("─".repeat(width));
+			return [topFill, ...body, border("─".repeat(width)), ...metadata];
 		}
 		if (kind === "native") return body;
 		const inner = Math.max(0, width - 2);
@@ -631,13 +631,13 @@ export class StyledEditor extends CustomEditor implements EditorComponent {
 			// When the frame hosts the status, the thinking level is already spelled out
 			// inside it (`◒ high`), so tinting the frame as well only fights the
 			// segments for attention. Bash mode still tints: that is a mode, not a level.
-			const hosting = this.borderStatus(inner, width) !== undefined;
+			const status = this.borderStatus(inner, width);
+			const hosting = status !== undefined;
 			const sideColor =
 				hosting && !this.isBashMode()
 					? (glyph: string) => this.statusTheme.apply("separator", glyph)
 					: this.borderColorFor();
 			const side = (line: string) => `${sideColor("│")}${widthSafe(line, inner)}${sideColor("│")}`;
-			const status = this.borderStatus(inner, width);
 			// A frame hosting the status is chrome: corners take the same quiet colour
 			// as the rule so the segments inside are what carry colour.
 			const quiet = (glyph: string) => this.statusTheme.apply("separator", glyph);
@@ -671,6 +671,36 @@ export class StyledEditor extends CustomEditor implements EditorComponent {
 			? `${quietOutline("└")}${outlineFooter}${quietOutline("┘")}`
 			: border(`└${"─".repeat(inner)}┘`);
 		return [outlineTop, ...body, outlineBottom, ...metadata];
+	}
+
+	private claudeRuleFill(width: number): string | undefined {
+		const percent = contextPercent(this.snapshot.context ?? {});
+		const thresholdPercent = this.compactionThresholdPercent();
+		if (percent === undefined || percent === null || thresholdPercent === undefined) {
+			// No context yet: keep the plain rule the branch had before.
+			return undefined;
+		}
+		const used = Math.min(width - 1, Math.max(0, Math.round((percent / 100) * (width - 1))));
+		const tick = Math.min(width - 1, Math.max(0, Math.round((thresholdPercent / 100) * (width - 1))));
+		const dimTick = this.statusTheme.apply("separator", "│");
+		const accentEq = (n: number) => this.statusTheme.apply("accent", "=".repeat(Math.max(0, n)));
+		const dimDash = (n: number) => this.statusTheme.apply("border", "-".repeat(Math.max(0, n)));
+		const accentDash = (n: number) => this.statusTheme.apply("accent", "-".repeat(Math.max(0, n)));
+		if (used < tick) {
+			// `=== (used) --- (remaining to tick) │ --- (after tick)`, tick itself accent.
+			return `${accentEq(used)}${dimDash(tick - used)}${dimTick}${dimDash(width - tick - 1)}`;
+		}
+		// At or past threshold the run up to and including the tick is accent.
+		return `${accentEq(tick)}${dimTick}${accentEq(used - tick)}${dimDash(width - used - 1)}`;
+	}
+
+	private compactionThresholdPercent(): number | undefined {
+		// Same source the editor gauge reads: omp compaction threshold.
+		// 90 is the fallback; allow a future snapshot field to override it.
+		const snap = this.snapshot.context as { thresholdPercent?: number } | undefined;
+		const v = snap?.thresholdPercent;
+		if (typeof v === "number" && Number.isFinite(v) && v > 0 && v <= 100) return v;
+		return CONTEXT_COMPACTION_PERCENT;
 	}
 
 	private metadata(width: number, style: "compact" | "boxed" | "dock" | "native"): string[] {
