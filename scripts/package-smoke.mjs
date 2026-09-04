@@ -7,11 +7,11 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const manifest = JSON.parse(readFileSync("package.json", "utf8"));
 const expected = {
-  name: "@nguyenquangthai/pi-omp-theme",
+  name: "pi-not-enough-info",
   version: manifest.version,
   entry: "./dist/extensions/pi-omp-theme.ts",
-  repository: "git+https://github.com/QuangThai/pi-omp-theme.git",
-  image: "https://raw.githubusercontent.com/QuangThai/pi-omp-theme/main/media/gallery-preview.png?v=gallery-2",
+  repository: "git+https://github.com/dbydd/pi-not-enough-info.git",
+  image: "https://raw.githubusercontent.com/dbydd/pi-not-enough-info/main/media/gallery-preview.png?v=gallery-2",
 };
 assert.equal(manifest.name, expected.name);
 assert.equal(manifest.version, expected.version);
