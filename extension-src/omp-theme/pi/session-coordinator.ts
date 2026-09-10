@@ -138,6 +138,7 @@ export function createPiOmpThemeSessionCoordinator(pi: ExtensionAPI, hooks: Comp
 		} satisfies import("../domain/providers.js").GitCommandRunner);
 	let cwd = process.cwd();
 	let active = false;
+	let lifecycleGeneration = 0;
 	let tuiSession = false;
 	let sessionTheme: unknown;
 	let sessionUi: import("@earendil-works/pi-coding-agent").ExtensionUIContext | undefined;
@@ -208,7 +209,7 @@ export function createPiOmpThemeSessionCoordinator(pi: ExtensionAPI, hooks: Comp
 	 */
 	const applyAutoTheme = (
 		config: import("../domain/config-types.js").NormalizedPiOmpThemeConfig,
-		ctx: ExtensionContext,
+		ctx: Pick<ExtensionContext, "mode" | "ui">,
 	) => {
 		const target = config.theme.autoApply;
 		if (ctx.mode !== "tui" || !target || target === "off") return;
@@ -248,6 +249,25 @@ export function createPiOmpThemeSessionCoordinator(pi: ExtensionAPI, hooks: Comp
 	return {
 		app,
 		async start(event: { reason: string }, ctx: ExtensionContext): Promise<void> {
+			const generation = ++lifecycleGeneration;
+			const session = {
+				cwd: ctx.cwd ?? process.cwd(),
+				mode: ctx.mode,
+				hasUI: ctx.hasUI,
+				projectTrusted: ctx.isProjectTrusted(),
+				ui: ctx.ui,
+				sessionManager: ctx.sessionManager,
+				model: ctx.model,
+				thinkingLevel: ctx.thinkingLevel,
+				getContextUsage: ctx.getContextUsage,
+				getSystemPrompt: ctx.getSystemPrompt,
+				scopedModels: ctx.scopedModels,
+			};
+			const isCurrent = () => lifecycleGeneration === generation;
+			// Pi invalidates an old ctx as soon as a replacement starts. Snapshot every
+			// session value before the first await and abandon this startup when shutdown
+			// advances the lifecycle generation.
+			if (!isCurrent()) return;
 			// Authorization is session-bound: Pi applies extension flag values only after
 			// extension modules finish loading, so flags must be read here (session_start),
 			// never at coordinator creation time.
@@ -269,9 +289,9 @@ export function createPiOmpThemeSessionCoordinator(pi: ExtensionAPI, hooks: Comp
 				}
 			}
 			if (app.runtime.current) app.sessionShutdown();
-			cwd = ctx.cwd ?? process.cwd();
-			tuiSession = ctx.mode === "tui";
-			const projectTrusted = ctx.isProjectTrusted();
+			cwd = session.cwd;
+			tuiSession = session.mode === "tui";
+			const projectTrusted = session.projectTrusted;
 			app.setProjectTrusted(projectTrusted);
 			source.setSession(cwd, projectTrusted);
 			// Drop any batch state carried over from the previous session (Pi renders
@@ -283,46 +303,48 @@ export function createPiOmpThemeSessionCoordinator(pi: ExtensionAPI, hooks: Comp
 			// restored/forked history renders collapsed before the first render pass
 			// (deterministic; no in-process turn_end events needed).
 			resetTurnRegistry();
-			rebuildTurnRegistryFromEntries(ctx.sessionManager.getEntries());
+			rebuildTurnRegistryFromEntries(session.sessionManager.getEntries());
 			// Stop any 1s elapsed re-render ticker left by a tool that was still
 			// running when the session ended.
 			stopAllElapsedTickers();
 			active = false;
 			await app.reload();
+			if (!isCurrent()) return;
 			productGate = app.productPolicy.corePatchGate;
 			// Resolve the host binding before the first install so a foreign module
 			// graph never certifies patches against a Pi copy that does not render.
 			hostBinding = await hostBindingProbe;
+			if (!isCurrent()) return;
 			if (hostBinding.status === "foreign" && !foreignBindingReported) {
 				foreignBindingReported = true;
-				ctx.ui?.notify?.(describeForeignHostBinding(hostBinding), "warning");
+				session.ui?.notify?.(describeForeignHostBinding(hostBinding), "warning");
 			}
 			active = true;
-			compatibility.install(app.config, ctx.mode === "tui", productGate, hostBinding);
+			compatibility.install(app.config, session.mode === "tui", productGate, hostBinding);
 			// Auto-apply the configured theme before surfaces capture the active one.
-			applyAutoTheme(app.config, ctx);
+			applyAutoTheme(app.config, session);
 			// Session-scoped render configuration for the boxed tool/message surfaces.
 			// Populated once per session (never inside render).
-			sessionTheme = ctx.ui?.theme as never;
-			sessionUi = ctx.ui as import("@earendil-works/pi-coding-agent").ExtensionUIContext | undefined;
+			sessionTheme = session.ui?.theme as never;
+			sessionUi = session.ui as import("@earendil-works/pi-coding-agent").ExtensionUIContext | undefined;
 			applyToolsRenderConfig(app.config);
 			applyMessagesConfig(app.config);
-			if (ctx.ui?.theme) setSpecialBlockTheme(ctx.ui.theme as never);
-			if (ctx.ui?.theme) setBashExecutionTheme(ctx.ui.theme as never);
+			if (session.ui?.theme) setSpecialBlockTheme(session.ui.theme as never);
+			if (session.ui?.theme) setBashExecutionTheme(session.ui.theme as never);
 			if (app.config.enabled) {
 				// Re-resolved on each call rather than captured here: Pi may not have put
 				// a theme on the UI context yet at session start, and a palette taken
 				// then comes back empty and stays empty for the whole session — the
 				// working row renders bold but colourless. The shimmer asks per run.
 				const resolveWorkingTheme = () => {
-					const piTheme = ctx.ui?.theme as { fg?: (color: string, text: string) => string } | undefined;
+					const piTheme = session.ui?.theme as { fg?: (color: string, text: string) => string } | undefined;
 					return resolveTheme(
 						piTheme?.fg ? { fg: (color: string, text: string) => piTheme.fg?.(color, text) ?? text } : undefined,
 						app.config,
 					);
 				};
-				installWorkingIndicator(ctx.ui, resolveWorkingTheme().mode === "ascii");
-				configureWorkingShimmer(ctx.ui, app.config.theme.shimmer, () => {
+				installWorkingIndicator(session.ui, resolveWorkingTheme().mode === "ascii");
+				configureWorkingShimmer(session.ui, app.config.theme.shimmer, () => {
 					const resolved = resolveWorkingTheme();
 					return {
 						low: resolved.color("dim"),
@@ -331,53 +353,53 @@ export function createPiOmpThemeSessionCoordinator(pi: ExtensionAPI, hooks: Comp
 						bold: true,
 					};
 				});
-			} else restoreWorkingIndicator(ctx.ui);
+			} else restoreWorkingIndicator(session.ui);
 			const toolDetails = collectToolDetails(pi.getActiveTools?.(), pi.getAllTools?.());
 			// Pi exposes only the live session, so the welcome card's recent list is
 			// read from the directory Pi writes sessions into. Best-effort by design:
 			// it returns an empty list rather than delaying or failing startup.
-			const sessions = readRecentSessions(ctx.sessionManager?.getSessionFile?.(), WELCOME_SESSION_SLOTS);
+			const sessions = readRecentSessions(session.sessionManager?.getSessionFile?.(), WELCOME_SESSION_SLOTS);
 			const renderSink: RenderSink = { current: undefined };
-			const runtimeUi = ctx.ui ? renderAwareUi(ctx.ui, renderSink) : undefined;
+			const runtimeUi = session.ui ? renderAwareUi(session.ui, renderSink) : undefined;
 			const requestRender = () => renderSink.current?.();
 			let sessionTitle: string | undefined;
 			try {
-				sessionTitle = ctx.sessionManager?.getSessionName?.() || undefined;
+				sessionTitle = session.sessionManager?.getSessionName?.() || undefined;
 			} catch {
 				sessionTitle = undefined;
 			}
 			app.sessionStart(
 				{
-					mode: ctx.mode,
-					hasUI: ctx.hasUI,
+					mode: session.mode,
+					hasUI: session.hasUI,
 					...(runtimeUi ? { ui: runtimeUi } : {}),
-					...(ctx.cwd ? { cwd: ctx.cwd } : {}),
-					...(ctx.model
+					...(session.cwd ? { cwd: session.cwd } : {}),
+					...(session.model
 						? {
 								model: {
-									id: ctx.model.id,
-									name: ctx.model.name,
-									provider: ctx.model.provider,
-									reasoning: ctx.model.reasoning,
+									id: session.model.id,
+									name: session.model.name,
+									provider: session.model.provider,
+									reasoning: session.model.reasoning,
 								},
 							}
 						: {}),
-					...(ctx.thinkingLevel ? { thinkingLevel: ctx.thinkingLevel } : {}),
+					...(session.thinkingLevel ? { thinkingLevel: session.thinkingLevel } : {}),
 					requestRender,
 					// Seeded here as well as from session_info_changed: that event fires
 					// only when the name changes, so a resumed session would show an
 					// untitled bar until something renamed it.
 					...(sessionTitle ? { sessionName: sessionTitle } : {}),
-					getContextUsage: ctx.getContextUsage,
+					getContextUsage: session.getContextUsage,
 					projectTrusted,
 					gitRunner,
 				},
 				event.reason as "startup" | "reload" | "new" | "resume" | "fork",
 				{
-					...(typeof ctx.getSystemPrompt === "function" ? { systemPrompt: ctx.getSystemPrompt() } : {}),
+					...(typeof session.getSystemPrompt === "function" ? { systemPrompt: session.getSystemPrompt() } : {}),
 					...(toolDetails ? { toolDetails } : {}),
 					...(sessions.length > 0 ? { sessions } : {}),
-					...(ctx.scopedModels && ctx.scopedModels.length > 0 ? { models: ctx.scopedModels.length } : {}),
+					...(session.scopedModels && session.scopedModels.length > 0 ? { models: session.scopedModels.length } : {}),
 				},
 			);
 			// Pi's editor owns the configured thinking-cycle key. Leaving that action
@@ -385,6 +407,7 @@ export function createPiOmpThemeSessionCoordinator(pi: ExtensionAPI, hooks: Comp
 			syncOperational(app.config);
 		},
 		shutdown(): void {
+			lifecycleGeneration++;
 			active = false;
 			tuiSession = false;
 			resetBatchRegistry();
